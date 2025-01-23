@@ -69,6 +69,8 @@ void fifo_add(FIFO *fifo, Paquet value){
     pthread_mutex_unlock(&mutex);
 }
 
+
+
 void *thread_producteur(FIFO *fifo){
     Paquet p;
     for(int i = 0; i < NB_TOURS; i++){
