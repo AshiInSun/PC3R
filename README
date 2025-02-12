@@ -1,5 +1,3 @@
 Author : Timothée MORANDEAU
 Le programme est censé recuperer des horaires de trains, et renvoyer la moyenne de temps d'arrets.
 Fait avec l'aide de GitHub Copilot et OpenAI ChatGPT
-
-Le Reader travaille avec les Workers sur un seul channel.
