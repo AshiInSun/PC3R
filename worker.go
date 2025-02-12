@@ -1,27 +1,51 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
 
-func Worker(readerch chan string, serverch chan Paquet, reductorch chan int) {
+func Worker(readerch chan string, serverch chan Paquet, reductorch chan int, ctx context.Context) {
 	thisch := make(chan Paquet)
-	for line := range readerch {
-		parts := strings.Split(line, ",")
-		// Traitement de la ligne : on creer des paquets avec les données
-		p := Paquet{
-			heureDepart:  parts[1],
-			heureArrivee: parts[2],
-			tempArret:    0,
-			workerChan:   thisch,
+	defer close(thisch) // Fermer le canal à la fin
+
+	for {
+		select {
+		case line, ok := <-readerch:
+			if !ok {
+				// Si readerch est fermé, on sort proprement
+				fmt.Println("Canal readerch fermé, arrêt du Worker.")
+				return
+			}
+
+			// Traitement de la ligne
+			parts := strings.Split(line, ",")
+			p := Paquet{
+				heureDepart:  parts[1],
+				heureArrivee: parts[2],
+				tempArret:    0,
+				workerChan:   thisch,
+			}
+
+			// Envoi au serveur
+			serverch <- p
+
+			// Attente de la réponse du serveur
+			select {
+			case paquet := <-thisch:
+				reductorch <- paquet.tempArret
+				fmt.Println(paquet.tempArret)
+			case <-ctx.Done():
+				// Si le contexte est annulé, on sort de la boucle
+				fmt.Println("Contexte annulé, arrêt du Worker.")
+				return
+			}
+
+		case <-ctx.Done():
+			// Si le contexte est annulé, on arrête le Worker
+			fmt.Println("Contexte annulé, arrêt du Worker.")
+			return
 		}
-		//On envoie le paquet au serveur
-		serverch <- p
-		//On attend la réponse du serveur
-		paquet := <-thisch
-		reductorch <- paquet.tempArret
-		fmt.Println(paquet.tempArret)
 	}
-	close(thisch)
 }

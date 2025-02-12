@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
+	"time"
 )
 
 // declaration varglobale
@@ -17,6 +21,17 @@ type Paquet struct {
 
 // main
 func main() {
+	// Vérifier si un argument est fourni
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: go run main.go <nombre>")
+		return
+	}
+
+	// Récupérer le premier argument
+	arg, _ := strconv.Atoi(os.Args[1])
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(arg)*time.Second)
+	defer cancel() // Annule le contexte à la fin
+
 	fmt.Println("Hello, World!")
 	ch := make(chan string, nbWorkers)
 	serverch := make(chan Paquet, nbWorkers)
@@ -27,25 +42,25 @@ func main() {
 
 	//reader
 	go func() {
-		Reader("stop_times.txt", ch)
-		wg.Done() // Signale que Reader() est terminé
+		defer wg.Done() // Signale que Reader() est terminé
+		Reader("stop_times.txt", ch, ctx)
 	}()
 	//server
 	go func() {
-		calculate(serverch)
-		wg.Done() // Signale que calculate() est terminé
+		defer wg.Done()
+		calculate(serverch, ctx)
 	}()
 	//reductor
 	go func() {
-		Reductor(reductorch)
-		wg.Done() // Signale que Reductor() est terminé
+		defer wg.Done()
+		Reductor(reductorch, ctx)
 	}()
 	//workers
 	for i := 0; i < nbWorkers; i++ {
 		workerGroup.Add(1)
 		go func() {
-			Worker(ch, serverch, reductorch)
-			workerGroup.Done() // Signale que Worker() est terminé
+			defer workerGroup.Done()
+			Worker(ch, serverch, reductorch, ctx)
 		}()
 	}
 	//attendre la fin des workers
