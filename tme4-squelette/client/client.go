@@ -76,7 +76,12 @@ func (p *personne_emp) initialise() {
 }
 
 func (p *personne_emp) travaille() {
-	// A FAIRE
+	func_tmp := p.afaire[0]
+	p.Personne = func_tmp(p.Personne)
+	p.afaire = p.afaire[1:]
+	if len(p.afaire) == 0 {
+		p.statut = "C"
+	}
 }
 
 func (p *personne_emp) vers_string() string {
