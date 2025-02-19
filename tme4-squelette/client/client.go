@@ -13,14 +13,14 @@ import (
 	tr "pc3r-tme4/client/travaux"    // contient les fonctions de travail sur les Personnes
 )
 
-var ADRESSE string = "localhost"                           // adresse de base pour la Partie 2
-var FICHIER_SOURCE string = "./conseillers-municipaux.txt" // fichier dans lequel piocher des personnes
-var TAILLE_SOURCE int = 450000                             // inferieure au nombre de lignes du fichier, pour prendre une ligne au hasard
-var TAILLE_G int = 5                                       // taille du tampon des gestionnaires
-var NB_G int = 2                                           // nombre de gestionnaires
-var NB_P int = 2                                           // nombre de producteurs
-var NB_O int = 4                                           // nombre d'ouvriers
-var NB_PD int = 2                                          // nombre de producteurs distants pour la Partie 2
+var ADRESSE string = "localhost"                                   // adresse de base pour la Partie 2
+var FICHIER_SOURCE string = "./elus-conseillers-municipaux-cm.txt" // fichier dans lequel piocher des personnes
+var TAILLE_SOURCE int = 450000                                     // inferieure au nombre de lignes du fichier, pour prendre une ligne au hasard
+var TAILLE_G int = 5                                               // taille du tampon des gestionnaires
+var NB_G int = 2                                                   // nombre de gestionnaires
+var NB_P int = 2                                                   // nombre de producteurs
+var NB_O int = 4                                                   // nombre d'ouvriers
+var NB_PD int = 2                                                  // nombre de producteurs distants pour la Partie 2
 
 var pers_vide = st.Personne{Nom: "", Prenom: "", Age: 0, Sexe: "M"} // une personne vide
 
@@ -48,7 +48,7 @@ type personne_int interface {
 // fabrique une personne à partir d'une ligne du fichier des conseillers municipaux
 // à changer si un autre fichier est utilisé
 func personne_de_ligne(l string) st.Personne {
-	separateur := regexp.MustCompile("\u0009") // oui, les donnees sont separees par des tabulations ... merci la Republique Francaise
+	separateur := regexp.MustCompile(";") // oui, les donnees sont separees par des tabulations ... merci la Republique Francaise
 	separation := separateur.Split(l, -1)
 	naiss, _ := time.Parse("2/1/2006", separation[7])
 	a1, _, _ := time.Now().Date()
@@ -85,13 +85,12 @@ func (p *personne_emp) travaille() {
 }
 
 func (p *personne_emp) vers_string() string {
-	// A FAIRE
-	return ""
+	res := p.Personne.Nom + " " + p.Personne.Prenom + " " + strconv.Itoa(p.Personne.Age) + " " + p.Personne.Sexe
+	return res
 }
 
 func (p *personne_emp) donne_statut() string {
-	// A FAIRE
-	return ""
+	return p.statut
 }
 
 // *** METHODES DE L'INTERFACE personne_int POUR LES PAQUETS DE PERSONNES DISTANTES (PARTIE 2) ***
@@ -128,6 +127,7 @@ func proxy() {
 func lecteur() string {
 	file, err := os.Open(FICHIER_SOURCE)
 	if err != nil {
+		fmt.Println(err)
 		fmt.Println("Erreur à l'ouverture du fichier")
 	}
 	defer file.Close()
@@ -147,15 +147,34 @@ func lecteur() string {
 // Si le statut est V, ils initialise le paquet de personne puis le repasse aux gestionnaires
 // Si le statut est R, ils travaille une fois sur le paquet puis le repasse aux gestionnaires
 // Si le statut est C, ils passent le paquet au collecteur
-func ouvrier() {
-	// A FAIRE
+func ouvrier(gest_chan chan personne_emp, ouv_chan chan personne_emp, collect_chan chan personne_emp) {
+	for {
+		personne := <-ouv_chan
+		fmt.Println("ouvrier recupere")
+		switch personne.donne_statut() {
+		case "V":
+			personne.initialise()
+			gest_chan <- personne
+			fmt.Println("C'est pas bloquant")
+		case "R":
+			personne.travaille()
+			gest_chan <- personne
+		case "C":
+			collect_chan <- personne
+		}
+	}
 }
 
 // Partie 1: les producteurs cree des personne_int implementees par des personne_emp initialement vides,
 // de statut V mais contenant un numéro de ligne (pour etre initialisee depuis le fichier texte)
 // la personne est passée aux gestionnaires
-func producteur() {
-	// A FAIRE
+func producteur(gest_chan chan personne_emp) {
+	for {
+		p := newPersonneEmp()
+		gest_chan <- *p
+		time.Sleep(10 * time.Millisecond)
+		fmt.Println("producteur")
+	}
 }
 
 // Partie 2: les producteurs distants cree des personne_int implementees par des personne_dist qui contiennent un identifiant unique
@@ -169,14 +188,52 @@ func producteur_distant() {
 // ils les passent aux ouvriers quand ils sont disponibles
 // ATTENTION: la famine des ouvriers doit être évitée: si les producteurs inondent les gestionnaires de paquets, les ouvrier ne pourront
 // plus rendre les paquets surlesquels ils travaillent pour en prendre des autres
-func gestionnaire() {
-	// A FAIRE
+func gestionnaire(gest_chan_fromprod chan personne_emp, gest_chan_fromouv chan personne_emp, ouv_chan chan personne_emp) {
+	queue := make([]personne_emp, 0, 5)
+	for {
+		flag := false
+		if len(queue) < 5 {
+			select {
+			case personne := <-gest_chan_fromouv:
+				fmt.Println("gestionnaire from ouv")
+				queue = append(queue, personne)
+			case personne := <-gest_chan_fromprod:
+				queue = append(queue, personne)
+			}
+		} else {
+			for len(queue) > 0 && !flag {
+				select {
+				case ouv_chan <- queue[len(queue)-1]:
+					queue = queue[:len(queue)-1]
+					time.Sleep(10 * time.Millisecond) // On veut laisser un peu de temp aux ouvriers pour pouvoir bien bourrer le channel
+				default:
+					flag = true
+					break // Les ouvriers ont du travail ! On retourne récuperer des paquets
+				}
+			}
+		}
+	}
 }
 
 // Partie 1: le collecteur recoit des personne_int dont le statut est c, il les collecte dans un journal
 // quand il recoit un signal de fin du temps, il imprime son journal.
-func collecteur() {
-	// A FAIRE
+func collecteur(collect_chan chan personne_emp, fintemps chan int) {
+	journal := make([]string, 0)
+	for {
+		select {
+		case temp := <-fintemps:
+			println(temp)
+			for u, _ := range journal {
+				println(u)
+			}
+			println("Fin du temps")
+			return
+		case personne := <-collect_chan:
+			journal = append(journal, personne.vers_string())
+			fmt.Println("collecteur")
+			fmt.Println(personne.vers_string())
+		}
+	}
 }
 
 func main() {
@@ -185,11 +242,28 @@ func main() {
 		fmt.Println("Format: client <port> <millisecondes d'attente>")
 		return
 	}
-	_, _ = strconv.Atoi(os.Args[1])       // utile pour la partie 2
-	millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout
+	_, _ = strconv.Atoi(os.Args[1]) // utile pour la partie 2
+	//millis, _ := strconv.Atoi(os.Args[2]) // duree du timeout
+	millis := 10000
 	fintemps := make(chan int)
 	// A FAIRE
 	// creer les canaux
+	var gest_chan_fromprod = make(chan personne_emp)
+	var gest_chan_fromouv = make(chan personne_emp, 1)
+	var ouv_chan = make(chan personne_emp)
+	var collect_chan = make(chan personne_emp)
+	// lancer les goroutines (partie 1): 1 lecteur, 1 collecteur, des producteurs, des gestionnaires, des ouvriers
+	go collecteur(collect_chan, fintemps)
+	for i := 0; i < NB_P; i++ {
+		go producteur(gest_chan_fromprod)
+	}
+	for i := 0; i < NB_G; i++ {
+		go gestionnaire(gest_chan_fromprod, gest_chan_fromouv, ouv_chan)
+	}
+	for i := 0; i < NB_O; i++ {
+		go ouvrier(gest_chan_fromouv, ouv_chan, collect_chan)
+	}
+
 	// lancer les goroutines (parties 1 et 2): 1 lecteur, 1 collecteur, des producteurs, des gestionnaires, des ouvriers
 	// lancer les goroutines (partie 2): des producteurs distants, un proxy
 	time.Sleep(time.Duration(millis) * time.Millisecond)
